@@ -34,7 +34,7 @@
 
 1. **克隆或下载项目代码到服务器**
    ```bash
-   git clone <项目地址>
+   git clone https://github.com/dcxa521gi/baby-food-app.git
    cd baby-food-generator
    ```
 
