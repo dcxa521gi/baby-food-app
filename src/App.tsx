@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Printer, Download, FileImage, FileSpreadsheet, Loader2, Baby, Settings, X, Check, History, Trash2, HelpCircle, MessageSquare, Mail, QrCode, Info, BookOpen, Sliders, Star, Calendar } from 'lucide-react';
+import { Printer, Download, FileImage, FileSpreadsheet, Loader2, Baby, Settings, X, Check, History, Trash2, HelpCircle, MessageSquare, Mail, QrCode, Info, BookOpen, Sliders, Star, Calendar, Copy } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -8,6 +8,7 @@ import { IngredientLibrary } from './components/IngredientLibrary';
 import { PreferencesModal, Preferences } from './components/PreferencesModal';
 import { FoodDetailModal } from './components/FoodDetailModal';
 import { OnboardingModal } from './components/OnboardingModal';
+import { ChangelogModal } from './components/ChangelogModal';
 import { findIngredient } from './data/ingredients';
 
 interface Meal {
@@ -21,6 +22,11 @@ interface Meal {
 interface DaySchedule {
   day: number;
   summary: string;
+  nutritionEstimates?: {
+    protein: string;
+    iron: string;
+    calcium: string;
+  };
   meals: Meal[];
 }
 
@@ -46,8 +52,10 @@ interface HistoryItem {
     allergies: string;
     cookingMethod: string;
     days: number;
+    startDate?: string;
   };
   data: ScheduleData;
+  note?: string;
 }
 
 const TooltipLabel = ({ label, tooltip }: { label: string, tooltip: string }) => (
@@ -71,6 +79,10 @@ export default function App() {
   const [cookingMethod, setCookingMethod] = useState<string>('');
   const [days, setDays] = useState<number>(3);
   const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [dateMode, setDateMode] = useState<'day' | 'week' | 'month'>('day');
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [selectedWeek, setSelectedWeek] = useState<string>('');
+  const [goals, setGoals] = useState({ protein: 15, iron: 10, calcium: 250 });
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +94,7 @@ export default function App() {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [selectedFood, setSelectedFood] = useState<{ name: string, nutrition: string, process: string } | null>(null);
   
   const [apiConfig, setApiConfig] = useState<ApiConfig>({
@@ -101,6 +114,10 @@ export default function App() {
   const [historyPage, setHistoryPage] = useState(1);
   const [favoritesPage, setFavoritesPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
+
+  const [completedMeals, setCompletedMeals] = useState<Record<string, boolean>>({});
+
+  const [activePlanId, setActivePlanId] = useState<string | null>(null);
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -146,15 +163,53 @@ export default function App() {
         setGender(prefs.gender || '男');
         setAllergies(prefs.allergies || '');
         setCookingMethod(prefs.cookingMethod || '');
+        if (prefs.goals) {
+          setGoals(prefs.goals);
+        }
       } catch (e) {
         console.error('Failed to parse saved prefs');
       }
+    }
+
+    const savedCompleted = localStorage.getItem('babyFoodCompletedMeals');
+    if (savedCompleted) {
+      try {
+        setCompletedMeals(JSON.parse(savedCompleted));
+      } catch (e) {
+        console.error('Failed to parse completed meals');
+      }
+    }
+
+    const savedActivePlanId = localStorage.getItem('babyFoodActivePlanId');
+    if (savedActivePlanId) {
+      setActivePlanId(savedActivePlanId);
     }
   }, []);
 
   const handleCloseOnboarding = () => {
     localStorage.setItem('babyFoodOnboardingDone', 'true');
     setShowOnboarding(false);
+  };
+
+  const getTodayDayIndex = () => {
+    if (!startDate) return -1;
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today.getTime() - start.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays + 1; // day 1 is diffDays 0
+  };
+
+  const toggleMealCompletion = (dayIndex: number, mealIndex: number) => {
+    if (!activePlanId) return;
+    const key = `${activePlanId}-${dayIndex}-${mealIndex}`;
+    setCompletedMeals(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('babyFoodCompletedMeals', JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleFoodClick = (foodName: string) => {
@@ -234,8 +289,8 @@ export default function App() {
       setError('月龄必须在 4 到 36 个月之间');
       return;
     }
-    if (days < 1 || days > 30) {
-      setError('生成天数必须在 1 到 30 天之间');
+    if (days < 1 || days > 31) {
+      setError('生成天数必须在 1 到 31 天之间');
       return;
     }
     if (!startDate) {
@@ -270,13 +325,17 @@ export default function App() {
       setData(result);
 
       // Save to history
+      const newId = Date.now().toString();
       const newItem: HistoryItem = {
-        id: Date.now().toString(),
+        id: newId,
         timestamp: Date.now(),
-        params: { age, gender, healthCondition, allergies, cookingMethod, days },
+        params: { age, gender, healthCondition, allergies, cookingMethod, days, startDate },
         data: result
       };
       
+      setActivePlanId(newId);
+      localStorage.setItem('babyFoodActivePlanId', newId);
+
       setHistory(prev => {
         const newHistory = [newItem, ...prev].slice(0, 50); // Keep last 50 items
         localStorage.setItem('babyFoodHistory', JSON.stringify(newHistory));
@@ -297,7 +356,12 @@ export default function App() {
     setAllergies(item.params.allergies);
     setCookingMethod(item.params.cookingMethod);
     setDays(item.params.days);
+    if (item.params.startDate) {
+      setStartDate(item.params.startDate);
+    }
     setData(item.data);
+    setActivePlanId(item.id);
+    localStorage.setItem('babyFoodActivePlanId', item.id);
     
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -319,6 +383,28 @@ export default function App() {
       localStorage.setItem('babyFoodFavorites', JSON.stringify(newFavorites));
       return newFavorites;
     });
+  };
+
+  const updateFavoriteNote = (id: string, note: string) => {
+    setFavorites(prev => {
+      const newFavorites = prev.map(item => item.id === id ? { ...item, note } : item);
+      localStorage.setItem('babyFoodFavorites', JSON.stringify(newFavorites));
+      return newFavorites;
+    });
+  };
+
+  const copyHistoryParams = (item: HistoryItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAge(item.params.age);
+    setGender(item.params.gender);
+    setHealthCondition(item.params.healthCondition || '');
+    setAllergies(item.params.allergies);
+    setCookingMethod(item.params.cookingMethod);
+    setDays(item.params.days);
+    if (item.params.startDate) {
+      setStartDate(item.params.startDate);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const formatDate = (timestamp: number) => {
@@ -366,6 +452,7 @@ export default function App() {
     setGender(prefs.gender);
     setAllergies(prefs.allergies);
     setCookingMethod(prefs.cookingMethod);
+    setGoals(prefs.goals);
   };
 
   const handleExportPDF = async () => {
@@ -495,7 +582,16 @@ export default function App() {
             <div className="bg-gradient-to-br from-rose-100 to-orange-100 p-2.5 rounded-2xl text-rose-500 shadow-sm border border-rose-200/50">
               <Baby size={28} />
             </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-rose-500 to-orange-400 bg-clip-text text-transparent">儿童辅食表生成器</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-rose-500 to-orange-400 bg-clip-text text-transparent">儿童辅食表生成器</h1>
+              <button 
+                onClick={() => setShowChangelog(true)}
+                className="px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 rounded-full border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                title="查看版本更新与部署指南"
+              >
+                v1.2.0
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button 
@@ -536,11 +632,12 @@ export default function App() {
       <AnimatePresence>
         {showOnboarding && <OnboardingModal onClose={handleCloseOnboarding} />}
         {showLibrary && <IngredientLibrary onClose={() => setShowLibrary(false)} />}
+        {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
         {showPrefs && (
           <PreferencesModal 
             onClose={() => setShowPrefs(false)} 
             onSave={handleSavePrefs} 
-            initialPrefs={{ age, gender, allergies, cookingMethod }} 
+            initialPrefs={{ age, gender, allergies, cookingMethod, goals }} 
           />
         )}
         {selectedFood && (
@@ -755,13 +852,74 @@ export default function App() {
                     label="过敏情况 (选填)" 
                     tooltip="宝宝已知的过敏食物。生成的食谱将严格规避这些食材，确保宝宝饮食安全。" 
                   />
-                  <input
-                    type="text"
-                    placeholder="如：牛奶、鸡蛋、花生等"
-                    value={allergies}
-                    onChange={(e) => setAllergies(e.target.value)}
-                    className="w-full px-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                  />
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="如：牛奶、鸡蛋、花生等，用逗号分隔"
+                      value={allergies}
+                      onChange={(e) => setAllergies(e.target.value)}
+                      className="w-full px-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {['牛奶', '鸡蛋', '花生', '大豆', '小麦', '坚果', '鱼类', '虾蟹'].map(allergen => {
+                        const isSelected = allergies.includes(allergen);
+                        return (
+                          <button
+                            key={allergen}
+                            type="button"
+                            onClick={() => {
+                              let current = allergies.split(/[,，、\s]+/).filter(Boolean);
+                              if (isSelected) {
+                                current = current.filter(a => a !== allergen);
+                              } else {
+                                current.push(allergen);
+                              }
+                              setAllergies(current.join('，'));
+                            }}
+                            className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                              isSelected 
+                                ? 'bg-rose-100 border-rose-200 text-rose-700' 
+                                : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                            }`}
+                          >
+                            {allergen}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(() => {
+                      const allergenSuggestions: Record<string, { title: string, desc: string, alts: string[] }> = {
+                        '牛奶': { title: '牛奶', desc: '建议使用深度水解或氨基酸配方奶替代；1岁以上可尝试植物奶。', alts: ['深度水解奶', '氨基酸奶', '无糖豆奶', '燕麦奶'] },
+                        '鸡蛋': { title: '鸡蛋', desc: '缺乏蛋类蛋白时，可增加肉类或豆制品；烘焙可用亚麻籽糊替代。', alts: ['禽肉', '畜肉', '鱼类', '豆腐', '亚麻籽糊'] },
+                        '花生': { title: '花生', desc: '规避所有含花生碎的零食，可使用其他健康油脂替代。', alts: ['牛油果', '橄榄油', '核桃油'] },
+                        '大豆': { title: '大豆', desc: '规避豆腐、豆浆、酱油等，可多吃其他豆类或肉类补充蛋白。', alts: ['红豆', '绿豆', '猪肉', '牛肉'] },
+                        '小麦': { title: '小麦', desc: '选择无麸质主食，避免普通面条、馒头和面包。', alts: ['大米', '小米', '玉米', '藜麦', '纯燕麦'] },
+                        '坚果': { title: '坚果', desc: '避免混合坚果酱，可使用安全的种子类或植物油补充不饱和脂肪酸。', alts: ['南瓜籽', '葵花籽油', '亚麻籽油'] },
+                        '鱼类': { title: '鱼类', desc: '缺乏海鱼摄入时，建议通过富含ALA的植物油补充，或咨询医生。', alts: ['核桃油', '亚麻籽油', 'DHA制剂'] },
+                        '虾蟹': { title: '虾蟹', desc: '规避海鲜，通过红肉补充优质蛋白和锌元素。', alts: ['牛肉', '猪肉', '动物肝脏'] }
+                      };
+                      const currentAllergens = allergies.split(/[,，、\s]+/).filter(Boolean);
+                      const suggestions = currentAllergens.map(a => allergenSuggestions[a]).filter(Boolean);
+                      if (suggestions.length === 0) return null;
+                      return (
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {suggestions.map((s, i) => (
+                            <div key={i} className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 shadow-sm">
+                              <div className="font-semibold text-blue-800 text-sm mb-1.5 flex items-center gap-1.5">
+                                <Info size={14} className="text-blue-500"/> {s.title} 替代方案
+                              </div>
+                              <p className="text-xs text-stone-600 mb-2.5 leading-relaxed">{s.desc}</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {s.alts.map((alt, j) => (
+                                  <span key={j} className="px-2 py-0.5 bg-white text-blue-600 rounded-md text-[11px] border border-blue-100 shadow-sm">{alt}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
 
                 <div>
@@ -780,34 +938,103 @@ export default function App() {
 
                 <div>
                   <TooltipLabel 
-                    label="食谱天数" 
-                    tooltip="希望一次性生成的食谱天数。建议不要太长（如3-5天），以便根据宝宝的接受程度随时调整。" 
+                    label="开始日期" 
+                    tooltip="选择辅食表的第一天日期，生成的食谱将包含具体的日期，方便您按日历执行。" 
                   />
-                  <select
-                    value={days}
-                    onChange={(e) => setDays(parseInt(e.target.value))}
-                    className="w-full px-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                  >
-                    {[1, 3, 5, 7, 15, 30].map(d => (
-                      <option key={d} value={d}>{d} 天</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setDateMode('day')}
+                      className={`px-3 py-1 text-xs rounded-full border transition-colors ${dateMode === 'day' ? 'bg-rose-100 border-rose-200 text-rose-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                    >
+                      按日选择
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDateMode('week')}
+                      className={`px-3 py-1 text-xs rounded-full border transition-colors ${dateMode === 'week' ? 'bg-rose-100 border-rose-200 text-rose-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                    >
+                      按周选择
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDateMode('month')}
+                      className={`px-3 py-1 text-xs rounded-full border transition-colors ${dateMode === 'month' ? 'bg-rose-100 border-rose-200 text-rose-700' : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'}`}
+                    >
+                      按月选择
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                    {dateMode === 'day' ? (
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                      />
+                    ) : dateMode === 'week' ? (
+                      <input
+                        type="week"
+                        value={selectedWeek}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedWeek(val);
+                          if (val) {
+                            const [yearStr, weekStr] = val.split('-W');
+                            const y = parseInt(yearStr);
+                            const w = parseInt(weekStr);
+                            const jan4 = new Date(y, 0, 4);
+                            const jan4Day = jan4.getDay() || 7;
+                            const mondayOfJan4Week = new Date(y, 0, 4 - jan4Day + 1);
+                            const targetMonday = new Date(mondayOfJan4Week.getTime() + (w - 1) * 7 * 24 * 60 * 60 * 1000);
+                            const offset = targetMonday.getTimezoneOffset() * 60000;
+                            const localISOTime = (new Date(targetMonday.getTime() - offset)).toISOString().split('T')[0];
+                            setStartDate(localISOTime);
+                            setDays(7);
+                          }
+                        }}
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                      />
+                    ) : (
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => {
+                          setSelectedMonth(e.target.value);
+                          if (e.target.value) {
+                            const [year, month] = e.target.value.split('-');
+                            const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+                            setDays(daysInMonth);
+                            setStartDate(`${e.target.value}-01`);
+                          }
+                        }}
+                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div>
                   <TooltipLabel 
-                    label="开始日期" 
-                    tooltip="选择辅食表的第一天日期，生成的食谱将包含具体的日期，方便您按日历执行。" 
+                    label="食谱天数" 
+                    tooltip={dateMode === 'day' ? "希望一次性生成的食谱天数。建议不要太长（如3-5天），以便根据宝宝的接受程度随时调整。" : "按周或按月选择时，天数将自动计算。"} 
                   />
-                  <div className="relative">
-                    <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                    />
-                  </div>
+                  {dateMode === 'day' ? (
+                    <select
+                      value={days}
+                      onChange={(e) => setDays(parseInt(e.target.value))}
+                      className="w-full px-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                    >
+                      {Array.from(new Set([1, 3, 5, 7, 15, 30, days])).sort((a, b) => a - b).map(d => (
+                        <option key={d} value={d}>{d} 天</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full px-4 py-2 rounded-xl border border-stone-200 bg-stone-50 text-stone-500 cursor-not-allowed">
+                      {days} 天 (自动计算)
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -850,6 +1077,46 @@ export default function App() {
               </div>
             ) : data ? (
               <div className="space-y-6">
+                {/* Today's Recipe Module */}
+                {(() => {
+                  const todayIndex = getTodayDayIndex();
+                  if (todayIndex >= 1 && todayIndex <= data.schedule.length) {
+                    const todaySchedule = data.schedule[todayIndex - 1];
+                    return (
+                      <div className="bg-rose-50/80 rounded-3xl border border-rose-200 p-6 shadow-sm print:hidden">
+                        <h3 className="text-xl font-bold text-rose-800 mb-4 flex items-center gap-2">
+                          <span className="w-2 h-6 bg-rose-400 rounded-full inline-block"></span>
+                          今日食谱 ({getDisplayDate(todayIndex)})
+                        </h3>
+                        <div className="space-y-3">
+                          {todaySchedule.meals.map((meal, mIdx) => {
+                            const isCompleted = completedMeals[`${activePlanId}-${todayIndex}-${mIdx}`];
+                            return (
+                              <div key={mIdx} className={`flex items-start gap-4 p-4 rounded-2xl border transition-all ${isCompleted ? 'bg-stone-50 border-stone-200 opacity-60' : 'bg-white border-rose-100 shadow-sm'}`}>
+                                <button 
+                                  onClick={() => toggleMealCompletion(todayIndex, mIdx)}
+                                  className={`mt-1 shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-stone-300 hover:border-rose-400'}`}
+                                >
+                                  {isCompleted && <Check size={14} />}
+                                </button>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`text-sm font-bold ${meal.type.includes('加餐') ? 'text-orange-600' : 'text-stone-800'}`}>{meal.type}</span>
+                                    <span className="text-xs text-stone-500">{meal.time}</span>
+                                  </div>
+                                  <p className={`font-medium ${isCompleted ? 'text-stone-500 line-through' : 'text-stone-800'}`}>{meal.food} <span className="text-stone-500 text-sm font-normal">({meal.amount})</span></p>
+                                  <p className="text-sm text-stone-500 mt-1">{meal.recipe}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Actions */}
                 <div className="flex flex-wrap gap-3 print:hidden">
                   <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors text-sm font-medium text-stone-700 shadow-sm">
@@ -895,12 +1162,96 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Overall Nutrition Report */}
+                  {(() => {
+                    const validDays = data.schedule.filter(d => d.nutritionEstimates);
+                    if (validDays.length === 0) return null;
+                    
+                    const avgProtein = validDays.reduce((acc, d) => acc + parseFloat(d.nutritionEstimates!.protein), 0) / validDays.length;
+                    const avgIron = validDays.reduce((acc, d) => acc + parseFloat(d.nutritionEstimates!.iron), 0) / validDays.length;
+                    const avgCalcium = validDays.reduce((acc, d) => acc + parseFloat(d.nutritionEstimates!.calcium), 0) / validDays.length;
+                    
+                    return (
+                      <div className="bg-blue-50/50 rounded-2xl p-5 border border-blue-100 mb-8">
+                        <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                          <span className="w-1.5 h-4 bg-blue-400 rounded-full inline-block"></span>
+                          食谱周期营养报告 (日均)
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="bg-white p-3 rounded-xl border border-blue-50 shadow-sm">
+                            <div className="text-xs text-stone-500 mb-1">蛋白质</div>
+                            <div className="flex items-end gap-2">
+                              <span className="text-lg font-bold text-stone-800">{avgProtein.toFixed(1)}g</span>
+                              <span className="text-xs text-stone-400 mb-1">/ 目标 {goals.protein}g</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-stone-100 rounded-full mt-2 overflow-hidden">
+                              <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(100, (avgProtein / goals.protein) * 100)}%` }}></div>
+                            </div>
+                          </div>
+                          <div className="bg-white p-3 rounded-xl border border-blue-50 shadow-sm">
+                            <div className="text-xs text-stone-500 mb-1">铁</div>
+                            <div className="flex items-end gap-2">
+                              <span className="text-lg font-bold text-stone-800">{avgIron.toFixed(1)}mg</span>
+                              <span className="text-xs text-stone-400 mb-1">/ 目标 {goals.iron}mg</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-stone-100 rounded-full mt-2 overflow-hidden">
+                              <div className="h-full bg-rose-400 rounded-full" style={{ width: `${Math.min(100, (avgIron / goals.iron) * 100)}%` }}></div>
+                            </div>
+                          </div>
+                          <div className="bg-white p-3 rounded-xl border border-blue-50 shadow-sm">
+                            <div className="text-xs text-stone-500 mb-1">钙</div>
+                            <div className="flex items-end gap-2">
+                              <span className="text-lg font-bold text-stone-800">{avgCalcium.toFixed(1)}mg</span>
+                              <span className="text-xs text-stone-400 mb-1">/ 目标 {goals.calcium}mg</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-stone-100 rounded-full mt-2 overflow-hidden">
+                              <div className="h-full bg-teal-400 rounded-full" style={{ width: `${Math.min(100, (avgCalcium / goals.calcium) * 100)}%` }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="space-y-8">
                     {data.schedule.map((day, idx) => (
                       <div key={idx} className="break-inside-avoid">
-                        <h3 className="text-lg font-bold text-stone-800 mb-4 pb-2 border-b border-stone-200 flex items-center gap-2">
-                          第 {day.day} 天 <span className="text-sm font-normal text-stone-500">({getDisplayDate(day.day)})</span>
-                        </h3>
+                        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-4 pb-2 border-b border-stone-200 gap-2">
+                          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+                            第 {day.day} 天 <span className="text-sm font-normal text-stone-500">({getDisplayDate(day.day)})</span>
+                          </h3>
+                          {day.nutritionEstimates && (
+                            <div className="flex gap-4 text-xs">
+                              <div className="flex flex-col">
+                                <span className="text-stone-500 mb-0.5">蛋白质</span>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.protein) / goals.protein) * 100)}%` }}></div>
+                                  </div>
+                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.protein}g <span className="text-stone-400 font-normal">/ {goals.protein}g</span></span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-stone-500 mb-0.5">铁</span>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-rose-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.iron) / goals.iron) * 100)}%` }}></div>
+                                  </div>
+                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.iron}mg <span className="text-stone-400 font-normal">/ {goals.iron}mg</span></span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-stone-500 mb-0.5">钙</span>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-teal-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.calcium) / goals.calcium) * 100)}%` }}></div>
+                                  </div>
+                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.calcium}mg <span className="text-stone-400 font-normal">/ {goals.calcium}mg</span></span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>
@@ -997,8 +1348,7 @@ export default function App() {
                 {(() => {
                   const currentList = activeTab === 'history' ? history : favorites;
                   const currentPage = activeTab === 'history' ? historyPage : favoritesPage;
-                  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-                  const paginatedList = currentList.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+                  const paginatedList = currentList.slice(0, currentPage * ITEMS_PER_PAGE);
                   
                   return paginatedList.map((item) => {
                     const isFav = favorites.some(fav => fav.id === item.id);
@@ -1010,7 +1360,7 @@ export default function App() {
                         onClick={() => loadHistoryItem(item)}
                         className="group relative bg-white hover:bg-rose-50/50 border border-stone-100 hover:border-rose-200 rounded-2xl p-4 cursor-pointer transition-all shadow-sm hover:shadow-md"
                       >
-                        <div className="flex justify-between items-start mb-2">
+                        <div className="flex justify-between items-start mb-2 pr-14">
                           <span className="text-sm font-medium text-stone-800">
                             {item.params.age}个月 | {item.params.days}天
                           </span>
@@ -1018,12 +1368,19 @@ export default function App() {
                             {formatDate(item.timestamp)}
                           </span>
                         </div>
-                        <div className="text-xs text-stone-600 space-y-1">
+                        <div className="text-xs text-stone-600 space-y-1 pr-14">
                           <p>性别: {item.params.gender}</p>
                           {item.params.allergies && <p className="truncate">规避: {item.params.allergies}</p>}
                         </div>
                         
                         <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={(e) => copyHistoryParams(item, e)}
+                            className="p-1.5 text-stone-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="复制参数"
+                          >
+                            <Copy size={16} />
+                          </button>
                           <button
                             onClick={(e) => toggleFavorite(item, e)}
                             className={`p-1.5 rounded-lg transition-colors ${isFav ? 'text-yellow-500 hover:bg-yellow-50' : 'text-stone-400 hover:text-yellow-500 hover:bg-yellow-50'}`}
@@ -1049,6 +1406,18 @@ export default function App() {
                             </button>
                           )}
                         </div>
+                        {activeTab === 'favorites' && (
+                          <div className="mt-3 pt-3 border-t border-rose-100/50">
+                            <input
+                              type="text"
+                              placeholder="添加备注 (如：宝宝很喜欢这份食谱)..."
+                              value={item.note || ''}
+                              onChange={(e) => updateFavoriteNote(item.id, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full text-sm px-3 py-2 rounded-xl border border-rose-100 bg-white/50 focus:bg-white focus:ring-1 focus:ring-rose-300 outline-none transition-all placeholder:text-stone-400"
+                            />
+                          </div>
+                        )}
                       </motion.div>
                     );
                   });
@@ -1067,26 +1436,15 @@ export default function App() {
                 const currentPage = activeTab === 'history' ? historyPage : favoritesPage;
                 const setPage = activeTab === 'history' ? setHistoryPage : setFavoritesPage;
                 
-                if (totalPages <= 1) return null;
+                if (currentPage >= totalPages) return null;
                 
                 return (
-                  <div className="flex justify-center items-center gap-2 mt-6">
+                  <div className="flex justify-center mt-8">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                      onClick={() => setPage(p => p + 1)}
+                      className="px-6 py-2.5 bg-white border border-stone-200 text-stone-600 rounded-full hover:bg-stone-50 hover:text-stone-900 transition-colors text-sm font-medium shadow-sm"
                     >
-                      上一页
-                    </button>
-                    <span className="text-sm text-stone-500 px-2">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                    >
-                      下一页
+                      加载更多
                     </button>
                   </div>
                 );

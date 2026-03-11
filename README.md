@@ -1,20 +1,80 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# AI 辅食生成器 (AI Baby Food Generator)
 
-# Run and deploy your AI Studio app
+## 📦 历史更新版本
 
-This contains everything you need to run your app locally.
+### v1.2.0 (当前版本)
+- **新增**：食谱周期营养报告（日均蛋白质、铁、钙摄入量进度条）
+- **新增**：偏好设置中 AI 驱动的营养目标建议，支持一键应用
+- **优化**：生成历史与我的收藏列表支持“加载更多”分页加载
+- **优化**：日期选择器支持按周、按月选择，自动计算并锁定天数
+- **优化**：生成天数上限放宽至 31 天
 
-View your app in AI Studio: https://ai.studio/apps/bed6a739-9272-427e-ae0f-3c5508f7a103
+### v1.1.0
+- **新增**：“我的收藏”支持添加自定义备注
+- **新增**：AI 驱动的过敏原替代建议升级为卡片网格展示
+- **新增**：历史记录和收藏卡片增加“复制参数”按钮，一键复用
+- **优化**：食材库支持点击食材名称直接查看详情
 
-## Run Locally
+### v1.0.0
+- 初始版本发布
+- 支持基于 AI 的个性化辅食表生成
+- 支持生成历史记录和收藏功能
+- 支持单份及批量导出 Excel
+- 支持自定义 API Key 和 Base URL
 
-**Prerequisites:**  Node.js
+---
 
+## 🚀 部署详细教程
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+本项目是一个基于 React + Vite + Express 的全栈应用，支持多种部署方式。
+
+### 方式一：Docker 部署 (推荐)
+
+使用 Docker 可以最快速地在任何服务器上运行本项目，无需配置 Node.js 环境。
+
+1. **克隆或下载项目代码到服务器**
+   ```bash
+   git clone <项目地址>
+   cd baby-food-generator
+   ```
+
+2. **构建 Docker 镜像**
+   ```bash
+   docker build -t baby-food-app .
+   ```
+
+3. **运行容器**
+   将容器的 3000 端口映射到宿主机的 3000 端口：
+   ```bash
+   docker run -d -p 3000:3000 --name baby-food-app --restart always baby-food-app
+   ```
+
+4. **访问应用**
+   在浏览器中访问 `http://你的服务器IP:3000` 即可使用。
+
+### 方式二：宝塔面板 (BT Panel) 部署
+
+如果您使用宝塔面板，可以通过 Node 项目管理器轻松部署。
+
+1. **安装 Node.js 环境**
+   - 在宝塔面板的**软件商店**中，搜索并安装 **Node.js 版本管理器**。
+   - 打开 Node.js 版本管理器，安装 **Node.js v20 或以上版本**。
+
+2. **上传项目文件**
+   - 在**文件**中，创建一个新目录（如 `/www/wwwroot/baby-food`）。
+   - 将项目的所有文件上传并解压到该目录。
+
+3. **添加 Node 项目**
+   - 在**网站** -> **Node项目** 中，点击**添加Node项目**。
+   - **项目目录**：选择刚才上传的目录 `/www/wwwroot/baby-food`。
+   - **启动选项**：选择“自定义启动命令”。
+   - **启动命令**：输入 `npm run start` (或者 `npm run dev`)。
+   - **项目端口**：填写 `3000`。
+   - **运行用户**：选择 `www`。
+
+4. **启动与访问**
+   - 点击提交，宝塔会自动执行 `npm install` 安装依赖并启动项目。
+   - 在宝塔的**安全**页面，放行 `3000` 端口。
+   - 在浏览器中访问 `http://你的服务器IP:3000` 即可使用。
+
+> **提示**：如果需要绑定域名，可以在宝塔的 Node 项目设置中直接添加域名，宝塔会自动配置 Nginx 反向代理。

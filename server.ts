@@ -57,7 +57,7 @@ async function startServer() {
 - 月龄：${age}个月
 - 性别：${gender}
 - 身体状态：${healthCondition || "健康"}
-- 过敏情况：${allergies || "无"}
+- 严格规避的过敏原/食材：${allergies || "无"}
 - 烹饪方式偏好：${cookingMethod || "不限"}
 - 食谱天数：${days}天
 
@@ -67,7 +67,8 @@ async function startServer() {
 3. 给出每天推荐的奶量和喝奶时间。
 4. 每餐的做法、用量都要有详细说明。特别是针对宝宝当前的身体状态（如肠胃弱、拉肚子等），在食材选择和做法上给出针对性调整。
 5. 增加每天的辅食总结（summary），说明当天辅食安排的寓意、营养重点和吃法建议。
-6. 请以JSON格式返回结果，格式如下：
+6. 必须严格排除用户指定的过敏原/食材（${allergies || "无"}），绝对不能出现在食谱中。
+7. 请以JSON格式返回结果，格式如下：
 {
   "babyInfo": "宝宝基本情况总结，包含对当前身体状态的分析",
   "dailyMilk": "每日奶量推荐及时间安排",
@@ -75,6 +76,11 @@ async function startServer() {
     {
       "day": 1,
       "summary": "今天的辅食安排寓意、营养重点及吃法建议总结",
+      "nutritionEstimates": {
+        "protein": "蛋白质预估值(g)",
+        "iron": "铁预估值(mg)",
+        "calcium": "钙预估值(mg)"
+      },
       "meals": [
         { "type": "早餐", "time": "08:00", "food": "食物名称", "amount": "用量", "recipe": "做法说明" },
         { "type": "加餐", "time": "10:00", "food": "食物名称", "amount": "用量", "recipe": "做法说明" },
