@@ -1,0 +1,5 @@
+{
+  "name": "儿童辅食表生成器",
+  "description": "根据宝宝的月龄、性别、过敏情况等信息，生成专属的辅食时间表，支持打印和导出。",
+  "requestFramePermissions": []
+}
