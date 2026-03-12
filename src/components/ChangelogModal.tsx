@@ -33,7 +33,21 @@ export function ChangelogModal({ onClose }: { onClose: () => void }) {
               <div className="relative pl-6 border-l-2 border-rose-200">
                 <div className="absolute w-3 h-3 bg-rose-500 rounded-full -left-[7px] top-1.5 ring-4 ring-white"></div>
                 <h4 className="text-md font-bold text-stone-800 flex items-center gap-2">
-                  v1.2.1 <span className="text-xs font-normal text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">最新版</span>
+                  v1.2.2 <span className="text-xs font-normal text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">最新版</span>
+                </h4>
+                <p className="text-xs text-stone-400 mb-2">2026-03-12</p>
+                <ul className="list-disc list-inside text-sm text-stone-600 space-y-1.5">
+                  <li><strong>提示词优化</strong>：在生成辅食表时加入“考虑食材季节性与可获得性”的要求，结果更贴合实际。</li>
+                  <li><strong>UI 优化</strong>：生成过程中增加实时耗时显示与预计剩余时间倒计时。</li>
+                  <li><strong>修复</strong>：解决营养预估值显示时单位（g/mg）重复出现的问题（如 15gg -{'>'} 15g）。</li>
+                  <li><strong>文档更新</strong>：完善部署教程，增加更新教程与已部署服务器列表。</li>
+                </ul>
+              </div>
+
+              <div className="relative pl-6 border-l-2 border-stone-200">
+                <div className="absolute w-3 h-3 bg-stone-300 rounded-full -left-[7px] top-1.5 ring-4 ring-white"></div>
+                <h4 className="text-md font-bold text-stone-800">
+                  v1.2.1
                 </h4>
                 <p className="text-xs text-stone-400 mb-2">2026-03-11</p>
                 <ul className="list-disc list-inside text-sm text-stone-600 space-y-1.5">
@@ -142,6 +156,50 @@ docker run -d -p 13521:3000 --name baby-food-app --restart always baby-food-app`
                   <li>在宝塔的<strong>安全</strong>页面，放行 <code>13521</code> 端口。</li>
                   <li>访问 <code>http://你的服务器IP:13521</code> 即可使用。</li>
                 </ol>
+              </div>
+              <div className="bg-stone-50 rounded-xl p-5 border border-stone-200">
+                <h4 className="font-bold text-stone-800 mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-purple-500 rounded-full inline-block"></span>
+                  更新应用教程
+                </h4>
+                <p className="text-sm text-stone-600 mb-3">当项目发布新版本时，请按照以下步骤更新：</p>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-bold text-stone-700 mb-1">Docker 环境更新：</p>
+                    <div className="bg-stone-800 rounded-lg p-3 overflow-x-auto">
+                      <pre className="text-xs text-stone-300 font-mono leading-relaxed">
+{`cd baby-food-app
+git pull
+docker build -t baby-food-app .
+docker stop baby-food-app
+docker rm baby-food-app
+docker run -d -p 13521:3000 --name baby-food-app --restart always baby-food-app`}
+                      </pre>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-stone-700 mb-1">宝塔 Node 环境更新：</p>
+                    <ol className="list-decimal list-inside text-xs text-stone-600 space-y-1">
+                      <li>在宝塔文件管理器中进入项目目录。</li>
+                      <li>点击“终端”，执行 <code>git pull</code> 获取最新代码。</li>
+                      <li>执行 <code>npm install</code> 更新依赖。</li>
+                      <li>执行 <code>npm run build</code> 重新构建项目。</li>
+                      <li>在 Node 项目管理器中点击“重启”项目。</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-stone-50 rounded-xl p-5 border border-stone-200">
+                <h4 className="font-bold text-stone-800 mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block"></span>
+                  已部署服务器列表
+                </h4>
+                <ul className="list-disc list-inside text-sm text-stone-600 space-y-1">
+                  <li>演示服务器 A (腾讯云/上海)</li>
+                  <li>演示服务器 B (阿里云/北京)</li>
+                  <li>演示服务器 C (华为云/广州)</li>
+                </ul>
               </div>
             </div>
           </section>
