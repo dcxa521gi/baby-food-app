@@ -9,7 +9,7 @@ import { PreferencesModal, Preferences } from './components/PreferencesModal';
 import { FoodDetailModal } from './components/FoodDetailModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { ChangelogModal } from './components/ChangelogModal';
-import { findIngredient } from './data/ingredients';
+import { findIngredient, ingredientsData } from './data/ingredients';
 
 interface Meal {
   type: string;
@@ -83,8 +83,11 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [selectedWeek, setSelectedWeek] = useState<string>('');
   const [goals, setGoals] = useState({ protein: 15, iron: 10, calcium: 250 });
+  const [showAiOnly, setShowAiOnly] = useState(false);
   
   const [loading, setLoading] = useState(false);
+  const [loadingTime, setLoadingTime] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ScheduleData | null>(null);
 
@@ -274,6 +277,26 @@ export default function App() {
       setSettingsSuccess(false);
       setShowSettings(false);
     }, 1500);
+  };
+
+  useEffect(() => {
+    if (loading) {
+      setLoadingTime(0);
+      timerRef.current = setInterval(() => {
+        setLoadingTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [loading]);
+
+  const formatNutritionValue = (val: string | undefined, unit: string) => {
+    if (!val) return `0${unit}`;
+    const numeric = val.replace(/[^\d.]/g, '');
+    return `${numeric}${unit}`;
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -589,7 +612,7 @@ export default function App() {
                 className="px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 rounded-full border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
                 title="查看版本更新与部署指南"
               >
-                v1.2.0
+                v1.2.1
               </button>
             </div>
           </div>
@@ -967,23 +990,56 @@ export default function App() {
                   <div className="relative">
                     <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
                     {dateMode === 'day' ? (
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="flex-1 pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setStartDate(new Date().toISOString().split('T')[0])}
+                          className="px-3 py-2 bg-stone-100 text-stone-600 rounded-xl text-xs font-medium hover:bg-stone-200 transition-colors whitespace-nowrap"
+                        >
+                          今天
+                        </button>
+                      </div>
                     ) : dateMode === 'week' ? (
-                      <input
-                        type="week"
-                        value={selectedWeek}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedWeek(val);
-                          if (val) {
-                            const [yearStr, weekStr] = val.split('-W');
-                            const y = parseInt(yearStr);
-                            const w = parseInt(weekStr);
+                      <div className="flex gap-2">
+                        <input
+                          type="week"
+                          value={selectedWeek}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedWeek(val);
+                            if (val) {
+                              const [yearStr, weekStr] = val.split('-W');
+                              const y = parseInt(yearStr);
+                              const w = parseInt(weekStr);
+                              const jan4 = new Date(y, 0, 4);
+                              const jan4Day = jan4.getDay() || 7;
+                              const mondayOfJan4Week = new Date(y, 0, 4 - jan4Day + 1);
+                              const targetMonday = new Date(mondayOfJan4Week.getTime() + (w - 1) * 7 * 24 * 60 * 60 * 1000);
+                              const offset = targetMonday.getTimezoneOffset() * 60000;
+                              const localISOTime = (new Date(targetMonday.getTime() - offset)).toISOString().split('T')[0];
+                              setStartDate(localISOTime);
+                              setDays(7);
+                            }
+                          }}
+                          className="flex-1 pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const now = new Date();
+                            const y = now.getFullYear();
+                            const jan1 = new Date(y, 0, 1);
+                            const d = Math.floor((now.getTime() - jan1.getTime()) / (24 * 60 * 60 * 1000));
+                            const w = Math.ceil((d + jan1.getDay() + 1) / 7);
+                            const val = `${y}-W${w.toString().padStart(2, '0')}`;
+                            setSelectedWeek(val);
+                            // Trigger the onChange logic
                             const jan4 = new Date(y, 0, 4);
                             const jan4Day = jan4.getDay() || 7;
                             const mondayOfJan4Week = new Date(y, 0, 4 - jan4Day + 1);
@@ -992,25 +1048,43 @@ export default function App() {
                             const localISOTime = (new Date(targetMonday.getTime() - offset)).toISOString().split('T')[0];
                             setStartDate(localISOTime);
                             setDays(7);
-                          }
-                        }}
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                      />
+                          }}
+                          className="px-3 py-2 bg-stone-100 text-stone-600 rounded-xl text-xs font-medium hover:bg-stone-200 transition-colors whitespace-nowrap"
+                        >
+                          本周
+                        </button>
+                      </div>
                     ) : (
-                      <input
-                        type="month"
-                        value={selectedMonth}
-                        onChange={(e) => {
-                          setSelectedMonth(e.target.value);
-                          if (e.target.value) {
-                            const [year, month] = e.target.value.split('-');
+                      <div className="flex gap-2">
+                        <input
+                          type="month"
+                          value={selectedMonth}
+                          onChange={(e) => {
+                            setSelectedMonth(e.target.value);
+                            if (e.target.value) {
+                              const [year, month] = e.target.value.split('-');
+                              const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+                              setDays(daysInMonth);
+                              setStartDate(`${e.target.value}-01`);
+                            }
+                          }}
+                          className="flex-1 pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = new Date().toISOString().slice(0, 7);
+                            setSelectedMonth(val);
+                            const [year, month] = val.split('-');
                             const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
                             setDays(daysInMonth);
-                            setStartDate(`${e.target.value}-01`);
-                          }
-                        }}
-                        className="w-full pl-10 pr-4 py-2 rounded-xl border border-stone-300 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none transition-all"
-                      />
+                            setStartDate(`${val}-01`);
+                          }}
+                          className="px-3 py-2 bg-stone-100 text-stone-600 rounded-xl text-xs font-medium hover:bg-stone-200 transition-colors whitespace-nowrap"
+                        >
+                          本月
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1035,6 +1109,58 @@ export default function App() {
                       {days} 天 (自动计算)
                     </div>
                   )}
+                </div>
+
+                <div className="pt-4 border-t border-stone-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <TooltipLabel 
+                      label="推荐食材建议" 
+                      tooltip="根据宝宝月龄推荐的适宜食材。开启“仅显示AI建议”将根据您的营养目标筛选最推荐的食材。" 
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-stone-500">仅显示AI建议</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAiOnly(!showAiOnly)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${showAiOnly ? 'bg-rose-500' : 'bg-stone-200'}`}
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${showAiOnly ? 'translate-x-5' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-stone-50 rounded-xl p-3 border border-stone-100 max-h-40 overflow-y-auto space-y-2">
+                    {(() => {
+                      let ageGroup = ingredientsData[0];
+                      if (age >= 7 && age <= 8) ageGroup = ingredientsData[1];
+                      else if (age >= 9 && age <= 11) ageGroup = ingredientsData[2];
+                      else if (age >= 12) ageGroup = ingredientsData[3];
+
+                      const filtered = ageGroup.items.filter(item => {
+                        if (!showAiOnly) return true;
+                        // Simple logic: if goal is high, check if ingredient mentions it
+                        const needsProtein = goals.protein > 15;
+                        const needsIron = goals.iron > 10;
+                        const needsCalcium = goals.calcium > 250;
+                        
+                        if (needsProtein && item.nutrition.includes('蛋白')) return true;
+                        if (needsIron && item.nutrition.includes('铁')) return true;
+                        if (needsCalcium && item.nutrition.includes('钙')) return true;
+                        
+                        // Default to showing some variety if goals are standard
+                        if (!needsProtein && !needsIron && !needsCalcium) {
+                          return item.nutrition.includes('铁') || item.nutrition.includes('蛋白') || item.nutrition.includes('维生素');
+                        }
+                        return false;
+                      });
+
+                      return filtered.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs p-2 bg-white rounded-lg border border-stone-100 shadow-sm">
+                          <span className="font-medium text-stone-700">{item.name}</span>
+                          <span className="text-stone-400 truncate ml-2 max-w-[150px]">{item.nutrition}</span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
                 </div>
 
                 <button
@@ -1071,6 +1197,9 @@ export default function App() {
                   <Baby size={32} className="absolute inset-0 m-auto text-rose-500 animate-pulse" />
                 </div>
                 <h3 className="text-xl font-bold text-stone-800 mb-2">正在为您生成专属辅食表...</h3>
+                <div className="text-rose-500 font-mono text-lg mb-4 tabular-nums">
+                  {Math.floor(loadingTime / 60)}:{(loadingTime % 60).toString().padStart(2, '0')}
+                </div>
                 <p className="text-stone-500 text-sm text-center max-w-xs">
                   AI 正在根据宝宝的月龄、性别和偏好，为您精心搭配营养均衡的食谱，请稍候。
                 </p>
@@ -1228,7 +1357,7 @@ export default function App() {
                                   <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.protein) / goals.protein) * 100)}%` }}></div>
                                   </div>
-                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.protein}g <span className="text-stone-400 font-normal">/ {goals.protein}g</span></span>
+                                  <span className="text-stone-700 font-medium">{formatNutritionValue(day.nutritionEstimates.protein, 'g')} <span className="text-stone-400 font-normal">/ {goals.protein}g</span></span>
                                 </div>
                               </div>
                               <div className="flex flex-col">
@@ -1237,7 +1366,7 @@ export default function App() {
                                   <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-rose-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.iron) / goals.iron) * 100)}%` }}></div>
                                   </div>
-                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.iron}mg <span className="text-stone-400 font-normal">/ {goals.iron}mg</span></span>
+                                  <span className="text-stone-700 font-medium">{formatNutritionValue(day.nutritionEstimates.iron, 'mg')} <span className="text-stone-400 font-normal">/ {goals.iron}mg</span></span>
                                 </div>
                               </div>
                               <div className="flex flex-col">
@@ -1246,7 +1375,7 @@ export default function App() {
                                   <div className="w-16 h-1.5 bg-stone-100 rounded-full overflow-hidden">
                                     <div className="h-full bg-teal-400 rounded-full" style={{ width: `${Math.min(100, (parseFloat(day.nutritionEstimates.calcium) / goals.calcium) * 100)}%` }}></div>
                                   </div>
-                                  <span className="text-stone-700 font-medium">{day.nutritionEstimates.calcium}mg <span className="text-stone-400 font-normal">/ {goals.calcium}mg</span></span>
+                                  <span className="text-stone-700 font-medium">{formatNutritionValue(day.nutritionEstimates.calcium, 'mg')} <span className="text-stone-400 font-normal">/ {goals.calcium}mg</span></span>
                                 </div>
                               </div>
                             </div>
@@ -1305,9 +1434,16 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-stone-400 bg-white rounded-2xl border border-stone-200 border-dashed print:hidden">
+              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-stone-400 bg-white rounded-2xl border border-stone-200 border-dashed print:hidden p-8 text-center">
                 <Baby size={48} className="mb-4 text-stone-300" />
-                <p>填写左侧信息，生成专属辅食表</p>
+                {activePlanId ? (
+                  <div className="space-y-2">
+                    <p className="text-stone-600 font-medium">该记录尚未生成详细数据</p>
+                    <p className="text-sm">请点击左侧的“生成辅食表”按钮来获取 AI 建议。</p>
+                  </div>
+                ) : (
+                  <p>填写左侧信息，生成专属辅食表</p>
+                )}
               </div>
             )}
           </div>

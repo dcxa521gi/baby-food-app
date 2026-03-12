@@ -4,6 +4,11 @@ import fetch from "node-fetch";
 
 dotenv.config();
 
+// Default to production if not specified
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = "production";
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -66,9 +71,10 @@ async function startServer() {
 2. 判断该月龄是否需要加餐，如果需要，请将加餐与正餐合并在一起，并严格按照时间先后顺序排列。
 3. 给出每天推荐的奶量和喝奶时间。
 4. 每餐的做法、用量都要有详细说明。特别是针对宝宝当前的身体状态（如肠胃弱、拉肚子等），在食材选择和做法上给出针对性调整。
-5. 增加每天的辅食总结（summary），说明当天辅食安排的寓意、营养重点和吃法建议。
-6. 必须严格排除用户指定的过敏原/食材（${allergies || "无"}），绝对不能出现在食谱中。
-7. 请以JSON格式返回结果，格式如下：
+5. 考虑食材的季节性与可获得性，优先推荐当季新鲜食材，避免过于冷门或难以购买的食材。
+6. 增加每天的辅食总结（summary），说明当天辅食安排的寓意、营养重点和吃法建议。
+7. 必须严格排除用户指定的过敏原/食材（${allergies || "无"}），绝对不能出现在食谱中。
+8. 请以JSON格式返回结果，格式如下：
 {
   "babyInfo": "宝宝基本情况总结，包含对当前身体状态的分析",
   "dailyMilk": "每日奶量推荐及时间安排",
