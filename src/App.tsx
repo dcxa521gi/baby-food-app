@@ -680,13 +680,13 @@ export default function App() {
                 <div className="bg-white p-3 rounded-lg shadow-sm border border-stone-200">
                   <QrCode size={120} className="text-stone-800" />
                 </div>
-                <p className="text-xs text-stone-500">扫码添加客服微信</p>
+                <p className="text-xs text-stone-500">添加开发者微信：Sugar_hyl</p>
               </div>
 
               <div className="flex items-center justify-center gap-2 text-stone-700 bg-rose-50 py-3 rounded-xl border border-rose-100">
                 <Mail size={18} className="text-rose-500" />
-                <a href="mailto:feedback@example.com" className="text-sm font-medium hover:text-rose-600 transition-colors">
-                  feedback@example.com
+                <a href="mailto:lyjhxf@126.com" className="text-sm font-medium hover:text-rose-600 transition-colors">
+                  lyjhxf@126.com
                 </a>
               </div>
             </div>
